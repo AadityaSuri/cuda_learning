@@ -1,60 +1,108 @@
 #include <iostream>
+#include <cuda.h>
+#include <cuda_runtime.h>
 #include <chrono>
-#define N 250000
 
-void __global__ add_cuda(long int *a, long int *b, long int *c) {
-    long int tid = blockIdx.x;
-    if (tid < N) {
-        c[tid] = a[tid] + b[tid];
+// CUDA kernel for vector addition
+__global__ void vectorAddKernel(const float *a, const float *b, float *c, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx < n) {
+        c[idx] = a[idx] + b[idx];
     }
 }
 
-void add_normal(long int *a, long int *b, long int *c) {
-    for (long int i = 0; i < N; i++) {
+// Host function for vector addition
+void vectorAddHost(const float *a, const float *b, float *c, int n) {
+    for (int i = 0; i < n; ++i) {
         c[i] = a[i] + b[i];
     }
 }
 
-int main(void) {
-    long int a[N], b[N], c_cuda[N], c_normal[N];
-    long int *dev_a, *dev_b, *dev_c;
+// Utility function to initialize vectors
+void initializeVectors(float *a, float *b, int n) {
+    for (int i = 0; i < n; ++i) {
+        a[i] = static_cast<float>(rand()) / RAND_MAX;
+        b[i] = static_cast<float>(rand()) / RAND_MAX;
+    }
+}
 
-    cudaMalloc((void**)&dev_a, N * sizeof(long int));
-    cudaMalloc((void**)&dev_b, N * sizeof(long int));
-    cudaMalloc((void**)&dev_c, N * sizeof(long int));
+// Function to check results
+void checkResults(const float *c1, const float *c2, int n) {
+    for (int i = 0; i < n; ++i) {
+        if (abs(c1[i] - c2[i]) > 1e-5) {
+            std::cerr << "Results do not match!" << std::endl;
+            return;
+        }
+    }
+    std::cout << "Results match!" << std::endl;
+}
 
-    for (long int i = 0; i < N; i++) {
-        a[i] = -i;
-        b[i] = i * i;
+int main() {
+    int n = 1 << 24; // Vector size
+    size_t bytes = n * sizeof(float);
+
+    // Allocate memory on host
+    float *h_a = (float *)malloc(bytes);
+    float *h_b = (float *)malloc(bytes);
+    float *h_c = (float *)malloc(bytes);
+    float *h_c_gpu = (float *)malloc(bytes);
+
+    // Initialize vectors
+    initializeVectors(h_a, h_b, n);
+
+    // Allocate memory on device
+    float *d_a, *d_b, *d_c;
+    cudaMalloc(&d_a, bytes);
+    cudaMalloc(&d_b, bytes);
+    cudaMalloc(&d_c, bytes);
+
+    // Copy data to device
+    cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice);
+
+    int num_runs = 1;
+
+    // Launch CUDA kernel
+    int blockSize = 256;
+    int gridSize = (n + blockSize - 1) / blockSize;
+    auto start_gpu = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < num_runs; i++) {
+        vectorAddKernel<<<gridSize, blockSize>>>(d_a, d_b, d_c, n);
     }
 
-    cudaMemcpy(dev_a, a, N * sizeof(long int), cudaMemcpyHostToDevice);
-    cudaMemcpy(dev_b, b, N * sizeof(long int), cudaMemcpyHostToDevice);
+    cudaDeviceSynchronize();
+    auto stop_gpu = std::chrono::high_resolution_clock::now();
 
-    auto t1 = std::chrono::high_resolution_clock::now();
-    add_cuda<<<N, 1>>>(dev_a, dev_b, dev_c);
-    auto t2 = std::chrono::high_resolution_clock::now();
+    // Copy result back to host
+    cudaMemcpy(h_c_gpu, d_c, bytes, cudaMemcpyDeviceToHost);
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    std::cout << "Time taken by CUDA: " << duration << " microseconds" << std::endl;
+    // Time host function
+    auto start_cpu = std::chrono::high_resolution_clock::now();
 
-    cudaMemcpy(c_cuda, dev_c, N * sizeof(long int), cudaMemcpyDeviceToHost);
+    for (int i = 0 ; i < num_runs; i++) {
+        vectorAddHost(h_a, h_b, h_c, n);
+    }
+    auto stop_cpu = std::chrono::high_resolution_clock::now();
 
-    // for (int i = 0; i < N; i++) {
-    //     std::cout << a[i] << " + " << b[i] << " = " << c[i] << std::endl;
-    // }
+    // Check results
+    checkResults(h_c, h_c_gpu, n);
 
-    cudaFree(dev_a);
-    cudaFree(dev_b);
-    cudaFree(dev_c);
+    // Calculate elapsed times
+    auto duration_gpu = std::chrono::duration_cast<std::chrono::microseconds>(stop_gpu - start_gpu) / num_runs;
+    auto duration_cpu = std::chrono::duration_cast<std::chrono::microseconds>(stop_cpu - start_cpu) / num_runs;
 
-    auto t3 = std::chrono::high_resolution_clock::now();
-    add_normal(a, b, c_normal);
-    auto t4 = std::chrono::high_resolution_clock::now();
+    std::cout << "GPU time: " << duration_gpu.count() << " microseconds" << std::endl;
+    std::cout << "CPU time: " << duration_cpu.count() << " microseconds" << std::endl;
 
-    auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
-    std::cout << "Time taken by normal: " << duration2 << " microseconds" << std::endl;
-
+    // Free memory
+    free(h_a);
+    free(h_b);
+    free(h_c);
+    free(h_c_gpu);
+    cudaFree(d_a);
+    cudaFree(d_b);
+    cudaFree(d_c);
 
     return 0;
 }
