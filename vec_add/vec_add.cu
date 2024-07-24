@@ -3,6 +3,36 @@
 #include <cuda_runtime.h>
 #include <chrono>
 
+void displayCudaProperties() {
+    int deviceCount;
+    cudaGetDeviceCount(&deviceCount);
+
+    if (deviceCount == 0) {
+        std::cout << "No CUDA devices found." << std::endl;
+        return;
+    }
+
+    for (int device = 0; device < deviceCount; ++device) {
+        cudaDeviceProp deviceProp;
+        cudaGetDeviceProperties(&deviceProp, device);
+
+        std::cout << "Device " << device << ": " << deviceProp.name << std::endl;
+        std::cout << "  Total global memory: " << deviceProp.totalGlobalMem << " bytes" << std::endl;
+        std::cout << "  Shared memory per block: " << deviceProp.sharedMemPerBlock << " bytes" << std::endl;
+        std::cout << "  Registers per block: " << deviceProp.regsPerBlock << std::endl;
+        std::cout << "  Warp size: " << deviceProp.warpSize << std::endl;
+        std::cout << "  Max threads per block: " << deviceProp.maxThreadsPerBlock << std::endl;
+        std::cout << "  Max threads dimensions: (" << deviceProp.maxThreadsDim[0] << ", "
+                  << deviceProp.maxThreadsDim[1] << ", " << deviceProp.maxThreadsDim[2] << ")" << std::endl;
+        std::cout << "  Max grid size: (" << deviceProp.maxGridSize[0] << ", "
+                  << deviceProp.maxGridSize[1] << ", " << deviceProp.maxGridSize[2] << ")" << std::endl;
+        std::cout << "  Clock rate: " << deviceProp.clockRate << " kHz" << std::endl;
+        std::cout << "  Total constant memory: " << deviceProp.totalConstMem << " bytes" << std::endl;
+        std::cout << "  Compute capability: " << deviceProp.major << "." << deviceProp.minor << std::endl;
+        std::cout << std::endl;
+    }
+}
+
 // CUDA kernel for vector addition
 __global__ void vectorAddKernel(const float *a, const float *b, float *c, int n) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -31,6 +61,7 @@ void checkResults(const float *c1, const float *c2, int n) {
     for (int i = 0; i < n; ++i) {
         if (abs(c1[i] - c2[i]) > 1e-5) {
             std::cerr << "Results do not match!" << std::endl;
+            std::cout << c1[i] << " " << c2[i] << std::endl;
             return;
         }
     }
@@ -38,6 +69,9 @@ void checkResults(const float *c1, const float *c2, int n) {
 }
 
 int main() {
+    // displayCudaProperties();
+
+
     int n = 1 << 24; // Vector size
     size_t bytes = n * sizeof(float);
 
@@ -52,6 +86,16 @@ int main() {
 
     // Allocate memory on device
     float *d_a, *d_b, *d_c;
+
+
+    int num_runs = 100;
+
+    // Launch CUDA kernel
+    int blockSize = 1024;
+    int gridSize = (n + blockSize - 1) / blockSize;
+
+
+    auto start_gpu = std::chrono::high_resolution_clock::now();
     cudaMalloc(&d_a, bytes);
     cudaMalloc(&d_b, bytes);
     cudaMalloc(&d_c, bytes);
@@ -59,13 +103,6 @@ int main() {
     // Copy data to device
     cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice);
     cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice);
-
-    int num_runs = 100;
-
-    // Launch CUDA kernel
-    int blockSize = 256;
-    int gridSize = (n + blockSize - 1) / blockSize;
-    auto start_gpu = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < num_runs; i++) {
         vectorAddKernel<<<gridSize, blockSize>>>(d_a, d_b, d_c, n);
@@ -103,6 +140,7 @@ int main() {
     cudaFree(d_a);
     cudaFree(d_b);
     cudaFree(d_c);
+
 
     return 0;
 }
