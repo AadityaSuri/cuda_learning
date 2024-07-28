@@ -69,7 +69,7 @@ void checkResults(const float *c1, const float *c2, int n) {
 }
 
 int main() {
-    // displayCudaProperties();
+    displayCudaProperties();
 
 
     int n = 1 << 24; // Vector size
