@@ -125,6 +125,10 @@ int main() {
     }
     auto stop_cpu = std::chrono::high_resolution_clock::now();
 
+    for (int i = 0; i < 10; i++) {
+        std::cout << h_c[i] << " " << h_c_gpu[i] << std::endl;
+    }
+
     // Check results
     checkResults(h_c, h_c_gpu, n);
 
