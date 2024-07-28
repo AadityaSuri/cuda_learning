@@ -91,11 +91,11 @@ int main() {
     int num_runs = 100;
 
     // Launch CUDA kernel
-    // int blockSize = 1024;
-    // int gridSize = (n + blockSize - 1) / blockSize;
+    int blockSize = 1024;
+    int gridSize = (n + blockSize - 1) / blockSize;
 
-    dim3 dimBlock(128, 1, 1);
-    dim3 dimGrid(32, 1, 1);    
+    // dim3 dimBlock(128, 1, 1);
+    // dim3 dimGrid(32, 1, 1);    
 
 
     auto start_gpu = std::chrono::high_resolution_clock::now();
@@ -108,7 +108,7 @@ int main() {
     cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice);
 
     for (int i = 0; i < num_runs; i++) {
-        vectorAddKernel<<<dimGrid, dimBlock>>>(d_a, d_b, d_c, n);
+        vectorAddKernel<<<gridSize, blockSize>>>(d_a, d_b, d_c, n);
     }
 
     cudaDeviceSynchronize();
