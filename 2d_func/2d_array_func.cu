@@ -94,8 +94,8 @@ void check_results(float *res, float *ref, int rows, int cols) {
 
 int main() {
 
-    int rows = 10000;
-    int cols = 10000;
+    int rows = 5000;
+    int cols = 5000;
 
     long long int totalBytes = rows * cols * sizeof(float);
 
